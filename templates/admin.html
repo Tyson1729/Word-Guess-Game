@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style3.css') }}">
+</head>
+<body>
+    <nav>
+        <span id="welcome-message">Admin: <strong>{{ admin_name }}</strong></span>
+        <a href="{{ url_for('logout') }}" id="logout-btn">Logout</a>
+    </nav>
+
+    <main class="admin-container">
+        <h1>Admin Dashboard</h1>
+
+        {% if message %}
+            <div class="message {{ message[0] }}">{{ message[1] }}</div>
+        {% endif %}
+        
+        <!-- Stats Cards -->
+        <section class="card-row">
+            <div class="card">
+                <h3>Total Users</h3>
+                <p class="stat-number">{{ total_users }}</p>
+            </div>
+            <div class="card">
+                <h3>Total Words</h3>
+                <p class="stat-number">{{ total_words }}</p>
+            </div>
+        </section>
+
+        <!-- Main Content Grid -->
+        <section class="main-grid">
+            <!-- Add Word Card -->
+            <div class="card">
+                <h3>Add New Word</h3>
+                <form method="POST" class="inline-form">
+                    <input type="hidden" name="action" value="add_word">
+                    <input type="text" name="new_word" maxlength="5" pattern="[A-Za-z]{5}" required placeholder="e.g. TIGER" style="text-transform:uppercase;">
+                    <button type="submit">Add Word</button>
+                </form>
+            </div>
+
+            <!-- All Users Card -->
+            <div class="card">
+                <h3>All Users</h3>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Username</th>
+                                <th>Role</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for user in all_users %}
+                            <tr>
+                                <td>{{ user.name }}</td>
+                                <td>{{ user.role }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Word List Card -->
+            <div class="card card-span-2">
+                <h3>Word Bank</h3>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Word</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for word in all_words %}
+                            <tr>
+                                <td>{{ word.word }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Recent Activity Card -->
+            <div class="card card-span-2">
+                <h3>Recent Activity (Last 10)</h3>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>Guessed</th>
+                                <th>Correct Word</th>
+                                <th>Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for activity in recent_activity %}
+                            <tr>
+                                <td>{{ activity.username }}</td>
+                                <td>{{ activity.guessed_word }}</td>
+                                <td>{{ activity.correct_word }}</td>
+                                <td>{{ activity.date }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </main>
+</body>
+</html>

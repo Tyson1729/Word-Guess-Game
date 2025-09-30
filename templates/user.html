@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wordle Game</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style2.css') }}">
+</head>
+<body>
+    <nav>
+        <span id="welcome-message">Welcome, <strong>{{ username }}</strong></span>
+        <a href="{{ url_for('logout') }}" id="logout-btn">Logout</a>
+    </nav>
+
+    <div class="main-content">
+        <!-- Left Column: Conditionally shows Instructions or Winning GIF -->
+        {% if is_win %}
+            <!-- Winning GIF Area -->
+            <section class="info-section win-gif-container">
+                <h3>You Won!</h3>
+                <img src="{{ url_for('static', filename='images/win.gif') }}" alt="Success Kid GIF">
+            </section>
+        {% else %}
+            <!-- Instructions Area -->
+            <section class="info-section instructions">
+                <h3>How to Play</h3>
+                <p>Guess the 5-letter word in 5 tries.</p>
+                <ul>
+                    <li>You have <strong>{{ remaining_attempts }}</strong> games left today.</li>
+                    <li>Each guess must be a valid 5-letter word.</li>
+                    <li>Hit submit to check your guess.</li>
+                </ul>
+                <div class="examples">
+                    <p><strong class="green-text">Green:</strong> The letter is in the word and in the correct spot.</p>
+                    <p><strong class="yellow-text">Yellow:</strong> The letter is in the word but in the wrong spot.</p>
+                    <p><strong class="gray-text">Gray:</strong> The letter is not in the word.</p>
+                </div>
+            </section>
+        {% endif %}
+
+        <!-- Game Area -->
+        <main class="game-area">
+            <h1 id="title">Guess the Word</h1>
+            <hr>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="message {{ category }}">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <div class="grid">
+                {% for r in range(max_attempts) %}
+                <div class="row">
+                    {% for c in range(5) %}
+                        {% if r < guesses|length %}
+                            <div class="tile {{ feedback[r][c] }}">{{ guesses[r][c] }}</div>
+                        {% else %}
+                            <div class="tile"></div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="action-area">
+                {% if show_guess_form %}
+                    <!-- Guess Form -->
+                    <form method="POST" class="guess-form">
+                        <input name="guess" maxlength="5" pattern="[A-Za-z]{5}" required placeholder="ENTER GUESS" 
+                               oninput="this.value = this.value.toUpperCase()" 
+                               onkeypress="return /[a-zA-Z]/i.test(event.key)"
+                               autocomplete="off" autofocus>
+                        <button type="submit">Submit</button>
+                    </form>
+                    <p class="attempts-left">
+                        Attempt {{ guesses|length + 1 }} of {{ max_attempts }}
+                    </p>
+                {% elif show_play_again %}
+                    <!-- Play Again Button -->
+                    <a href="{{ url_for('play_again') }}" class="play-again-btn">Play Again</a>
+                    <p class="attempts-left">
+                        You have {{ remaining_attempts }} games left today.
+                    </p>
+                {% else %}
+                    <!-- No more games message -->
+                    <div class="game-over-message">
+                        <p>No more games for today!</p>
+                        <p>Come back tomorrow for more.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </main>
+    </div>
+</body>
+</html>

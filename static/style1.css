@@ -1,0 +1,114 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;700&display=swap');
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Poppins', sans-serif;
+}
+
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background-image: linear-gradient( 109.6deg,  rgba(163,213,255,1) 11.3%, rgba(4,137,137,1) 86.7% );
+    color: #333;
+}
+
+nav {
+    width: 100%;
+    padding: 15px 0;
+    position: fixed;
+    font-size: large;
+    color: white;
+    top: 0;
+    left: 0;
+    background-color: rgba(70, 65, 130, 0.30);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    z-index: 100;
+    text-align: center;
+}
+
+.container {
+    width: 100%;
+    max-width: 450px;
+    margin: 0 15px;
+}
+
+.form-box {
+    padding: 35px;
+    background: #fff;
+    border-radius: 15px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+h2 {
+    font-size: 32px;
+    text-align: center;
+    margin-bottom: 25px;
+    color: #048989;
+}
+
+input, select {
+    width: 100%;
+    padding: 12px;
+    background: #f0f2f5;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    outline: none;
+    font-size: 16px;
+    color: #333;
+    margin-bottom: 20px;
+}
+
+button {
+    width: 100%;
+    padding: 12px;
+    background: #048989;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+    color: #fff;
+    font-weight: 500;
+    margin-bottom: 20px;
+    transition: background-color 0.3s;
+}
+
+button:hover {
+    background: #036b6b;
+}
+
+p {
+    font-size: 15px;
+    text-align: center;
+    margin-bottom: 10px;
+}
+
+p a {
+    color: #048989;
+    font-weight: 500;
+    text-decoration: none;
+}
+
+p a:hover {
+    text-decoration: underline;
+}
+
+.flash-message {
+    padding: 10px;
+    margin-bottom: 15px;
+    border-radius: 5px;
+    text-align: center;
+    font-weight: 500;
+}
+.flash-message.error {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+.flash-message.success {
+    background-color: #d4edda;
+    color: #155724;
+}
