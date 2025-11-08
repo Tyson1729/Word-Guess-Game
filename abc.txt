@@ -1,0 +1,26 @@
+CREATE OR REPLACE FUNCTION log_table_create_alter()
+RETURNS event_trigger AS $$
+BEGIN
+    INSERT INTO audit_logs (
+        table_name, 
+        operation_type, 
+        user_name, 
+        changed_at,
+        new_data
+    )
+    SELECT
+        c.object_identity AS table_name,
+        c.command_tag AS operation_type,
+        session_user AS user_name,
+        CURRENT_TIMESTAMP AS changed_at,
+        jsonb_build_object(
+            'schema_name', split_part(c.object_identity, '.', 1),
+            'command_tag', c.command_tag,
+            'description', format('DDL command executed: %s on %s', c.command_tag, c.object_identity)
+        ) AS new_data
+    FROM 
+        pg_event_trigger_ddl_commands() AS c
+    WHERE 
+        c.command_tag IN ('CREATE TABLE', 'ALTER TABLE'); -- <-- MISSING SEMICOLON ADDED HERE
+END;
+$$ LANGUAGE plpgsql;
