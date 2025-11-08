@@ -1,26 +1,132 @@
-CREATE OR REPLACE FUNCTION log_table_create_alter()
+CREATE OR REPLACE FUNCTION log_table_drop()
 RETURNS event_trigger AS $$
 BEGIN
     INSERT INTO audit_logs (
         table_name, 
         operation_type, 
         user_name, 
-        changed_at,
-        new_data
+        changed_at, -- <-- ADDED for clarity
+        old_data
     )
     SELECT
-        c.object_identity AS table_name,
-        c.command_tag AS operation_type,
+        d.object_identity AS table_name,
+        'DROP TABLE' AS operation_type,
         session_user AS user_name,
-        CURRENT_TIMESTAMP AS changed_at,
+        CURRENT_TIMESTAMP AS changed_at, -- <-- ADDED for clarity
         jsonb_build_object(
-            'schema_name', split_part(c.object_identity, '.', 1),
-            'command_tag', c.command_tag,
-            'description', format('DDL command executed: %s on %s', c.command_tag, c.object_identity)
-        ) AS new_data
+            'schema_name', d.schema_name,
+            'object_type', d.object_type,
+            'description', format('Table dropped: %s', d.object_identity)
+        ) AS old_data
     FROM 
-        pg_event_trigger_ddl_commands() AS c
+        pg_event_trigger_dropped_objects() AS d
     WHERE 
-        c.command_tag IN ('CREATE TABLE', 'ALTER TABLE'); -- <-- MISSING SEMICOLON ADDED HERE
+        d.object_type = 'table';
 END;
 $$ LANGUAGE plpgsql;
+
+
+
+
+CREATE OR REPLACE FUNCTION fn_attach_audit_trigger_to_new_table()
+RETURNS event_trigger AS $$
+DECLARE
+    obj RECORD;
+    pk_columns_list TEXT;
+BEGIN
+    -- Loop through all tables created in this event
+    FOR obj IN 
+        SELECT * FROM pg_event_trigger_ddl_commands() 
+        WHERE command_tag = 'CREATE TABLE'
+    LOOP
+        -- Find all PK columns for this new table and build a string list
+        SELECT string_agg(quote_literal(kcu.column_name), ', ')
+        INTO pk_columns_list
+        FROM information_schema.table_constraints AS tc
+        JOIN information_schema.key_column_usage AS kcu
+          ON tc.constraint_name = kcu.constraint_name
+          AND tc.table_schema = kcu.table_schema
+        WHERE tc.constraint_type = 'PRIMARY KEY'
+          AND tc.table_schema = obj.schema_name
+          AND tc.table_name = obj.object_name;
+
+        -- Dynamically create the trigger on the new table
+        -- and pass the list of PK columns as arguments.
+        EXECUTE format(
+            'CREATE TRIGGER trg_audit_changes_on_%s ' ||
+            'AFTER INSERT OR UPDATE OR DELETE ON %I ' ||
+            'FOR EACH ROW EXECUTE FUNCTION log_table_changes(%s);',
+            obj.object_name,   -- For a unique trigger name (e.g., trg_audit_changes_on_users)
+            obj.object_identity, -- For the full table name (e.g., public.users)
+            COALESCE(pk_columns_list, '') -- Pass the list: 'col1', 'col2'
+        );
+    END LOOP;
+END;
+$$ LANGUAGE plpgsql;
+
+----------------------------------------------------------------------
+-- STEP 5: Create the Event Triggers to Activate Everything
+-- These connect the functions from Steps 3 & 4 to database events.
+----------------------------------------------------------------------
+
+-- 1. Logs CREATE and ALTER
+CREATE EVENT TRIGGER trg_log_create_alter
+    ON ddl_command_end
+    WHEN TAG IN ('CREATE TABLE', 'ALTER TABLE')
+    EXECUTE FUNCTION log_table_create_alter();
+
+-- 2. Logs DROP
+CREATE EVENT TRIGGER trg_log_drop
+    ON sql_drop
+    WHEN TAG IN ('DROP TABLE')
+    EXECUTE FUNCTION log_table_drop();
+
+-- 3. Attaches the DML trigger to new tables
+CREATE EVENT TRIGGER trg_auto_attach_dml_trigger
+    ON ddl_command_end
+    WHEN TAG IN ('CREATE TABLE')
+    EXECUTE FUNCTION fn_attach_audit_trigger_to_new_table();
+
+
+
+
+CREATE TABLE monthly_sales (
+    Customer_Name TEXT,
+    Month_Year TEXT, -- e.g., '2025-11'
+    sales_amount NUMERIC(10, 2),
+    PRIMARY KEY (Customer_Name, Month_Year)
+);
+
+
+CREATE TABLE monthly_sales (
+    Customer_Name TEXT,
+    Month_Year TEXT, -- e.g., '2025-11'
+    sales_amount NUMERIC(10, 2),
+    PRIMARY KEY (Customer_Name, Month_Year)
+);
+
+
+INSERT INTO monthly_sales (Customer_Name, Month_Year, sales_amount)
+VALUES 
+('Acme Corp', '2025-10', 1500.00),
+('Beta Inc', '2025-10', 800.50);
+
+UPDATE monthly_sales
+SET sales_amount = 1650.00
+WHERE Customer_Name = 'Acme Corp' AND Month_Year = '2025-10';
+
+DELETE FROM monthly_sales
+WHERE Customer_Name = 'Beta Inc';
+
+DROP TABLE monthly_sales;
+
+SELECT 
+    audit_id, 
+    table_name, 
+    operation_type, 
+    changed_at,
+    primary_key_value,
+    old_data,
+    new_data
+FROM audit_logs
+ORDER BY audit_id;
