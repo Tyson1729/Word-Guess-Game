@@ -33,13 +33,19 @@ RETURNS event_trigger AS $$
 DECLARE
     obj RECORD;
     pk_columns_list TEXT;
+    v_table_name TEXT; -- <-- ADDED: Variable to hold the raw table name
 BEGIN
-    -- Loop through all tables created in this event
     FOR obj IN 
         SELECT * FROM pg_event_trigger_ddl_commands() 
         WHERE command_tag = 'CREATE TABLE'
     LOOP
-        -- Find all PK columns for this new table and build a string list
+        -- FIX: Get the raw table name using the OID (objid)
+        -- This is the correct way to get the name for joining with information_schema
+        SELECT relname INTO v_table_name 
+        FROM pg_catalog.pg_class 
+        WHERE oid = obj.objid;
+
+        -- Find all PK columns for this new table
         SELECT string_agg(quote_literal(kcu.column_name), ', ')
         INTO pk_columns_list
         FROM information_schema.table_constraints AS tc
@@ -48,17 +54,16 @@ BEGIN
           AND tc.table_schema = kcu.table_schema
         WHERE tc.constraint_type = 'PRIMARY KEY'
           AND tc.table_schema = obj.schema_name
-          AND tc.table_name = obj.object_name;
+          AND tc.table_name = v_table_name; -- <-- CHANGED: Use v_table_name
 
-        -- Dynamically create the trigger on the new table
-        -- and pass the list of PK columns as arguments.
+        -- Dynamically create the trigger AND pass the PK columns as arguments
         EXECUTE format(
             'CREATE TRIGGER trg_audit_changes_on_%s ' ||
             'AFTER INSERT OR UPDATE OR DELETE ON %I ' ||
             'FOR EACH ROW EXECUTE FUNCTION log_table_changes(%s);',
-            obj.object_name,   -- For a unique trigger name (e.g., trg_audit_changes_on_users)
-            obj.object_identity, -- For the full table name (e.g., public.users)
-            COALESCE(pk_columns_list, '') -- Pass the list: 'col1', 'col2'
+            v_table_name,        -- <-- CHANGED: Use v_table_name for a unique trigger name
+            obj.object_identity, -- This is correct: Use the full, quoted identity for the ON clause
+            COALESCE(pk_columns_list, '') -- Pass the list of PK columns
         );
     END LOOP;
 END;
