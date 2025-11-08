@@ -1,96 +1,41 @@
-CREATE OR REPLACE FUNCTION log_table_drop()
-RETURNS event_trigger AS $$
-BEGIN
-    INSERT INTO audit_logs (
-        table_name, 
-        operation_type, 
-        user_name, 
-        changed_at, -- <-- ADDED for clarity
-        old_data
-    )
-    SELECT
-        d.object_identity AS table_name,
-        'DROP TABLE' AS operation_type,
-        session_user AS user_name,
-        CURRENT_TIMESTAMP AS changed_at, -- <-- ADDED for clarity
-        jsonb_build_object(
-            'schema_name', d.schema_name,
-            'object_type', d.object_type,
-            'description', format('Table dropped: %s', d.object_identity)
-        ) AS old_data
-    FROM 
-        pg_event_trigger_dropped_objects() AS d
-    WHERE 
-        d.object_type = 'table';
-END;
-$$ LANGUAGE plpgsql;
-
-
-
-
-CREATE OR REPLACE FUNCTION fn_attach_audit_trigger_to_new_table()
-RETURNS event_trigger AS $$
+CREATE OR REPLACE FUNCTION attach_audit_trigger(table_identity TEXT)
+RETURNS TEXT AS $$
 DECLARE
-    obj RECORD;
     pk_columns_list TEXT;
-    v_table_name TEXT; -- <-- ADDED: Variable to hold the raw table name
+    v_schema_name TEXT;
+    v_table_name TEXT;
 BEGIN
-    FOR obj IN 
-        SELECT * FROM pg_event_trigger_ddl_commands() 
-        WHERE command_tag = 'CREATE TABLE'
-    LOOP
-        -- FIX: Get the raw table name using the OID (objid)
-        -- This is the correct way to get the name for joining with information_schema
-        SELECT relname INTO v_table_name 
-        FROM pg_catalog.pg_class 
-        WHERE oid = obj.objid;
+    -- Extract schema and table name from the input
+    v_schema_name := split_part(table_identity, '.', 1);
+    v_table_name  := split_part(table_identity, '.', 2);
 
-        -- Find all PK columns for this new table
-        SELECT string_agg(quote_literal(kcu.column_name), ', ')
-        INTO pk_columns_list
-        FROM information_schema.table_constraints AS tc
-        JOIN information_schema.key_column_usage AS kcu
-          ON tc.constraint_name = kcu.constraint_name
-          AND tc.table_schema = kcu.table_schema
-        WHERE tc.constraint_type = 'PRIMARY KEY'
-          AND tc.table_schema = obj.schema_name
-          AND tc.table_name = v_table_name; -- <-- CHANGED: Use v_table_name
+    -- Find all PK columns for this table
+    SELECT string_agg(quote_literal(kcu.column_name), ', ')
+    INTO pk_columns_list
+    FROM information_schema.table_constraints AS tc
+    JOIN information_schema.key_column_usage AS kcu
+      ON tc.constraint_name = kcu.constraint_name
+      AND tc.table_schema = kcu.table_schema
+    WHERE tc.constraint_type = 'PRIMARY KEY'
+      AND tc.table_schema = v_schema_name
+      AND tc.table_name = v_table_name;
 
-        -- Dynamically create the trigger AND pass the PK columns as arguments
-        EXECUTE format(
-            'CREATE TRIGGER trg_audit_changes_on_%s ' ||
-            'AFTER INSERT OR UPDATE OR DELETE ON %I ' ||
-            'FOR EACH ROW EXECUTE FUNCTION log_table_changes(%s);',
-            v_table_name,        -- <-- CHANGED: Use v_table_name for a unique trigger name
-            obj.object_identity, -- This is correct: Use the full, quoted identity for the ON clause
-            COALESCE(pk_columns_list, '') -- Pass the list of PK columns
-        );
-    END LOOP;
+    -- Dynamically create the trigger
+    EXECUTE format(
+        'CREATE TRIGGER trg_audit_changes_on_%s ' ||
+        'AFTER INSERT OR UPDATE OR DELETE ON %I ' ||
+        'FOR EACH ROW EXECUTE FUNCTION log_table_changes(%s);',
+        v_table_name,        -- For a unique trigger name
+        table_identity,      -- For the full table name
+        COALESCE(pk_columns_list, '') -- Pass the list of PK columns
+    );
+    
+    RETURN 'Audit trigger attached to ' || table_identity;
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN 'Could not attach trigger. ERROR: ' || SQLERRM;
 END;
 $$ LANGUAGE plpgsql;
-
-----------------------------------------------------------------------
--- STEP 5: Create the Event Triggers to Activate Everything
--- These connect the functions from Steps 3 & 4 to database events.
-----------------------------------------------------------------------
-
--- 1. Logs CREATE and ALTER
-CREATE EVENT TRIGGER trg_log_create_alter
-    ON ddl_command_end
-    WHEN TAG IN ('CREATE TABLE', 'ALTER TABLE')
-    EXECUTE FUNCTION log_table_create_alter();
-
--- 2. Logs DROP
-CREATE EVENT TRIGGER trg_log_drop
-    ON sql_drop
-    WHEN TAG IN ('DROP TABLE')
-    EXECUTE FUNCTION log_table_drop();
-
--- 3. Attaches the DML trigger to new tables
-CREATE EVENT TRIGGER trg_auto_attach_dml_trigger
-    ON ddl_command_end
-    WHEN TAG IN ('CREATE TABLE')
-    EXECUTE FUNCTION fn_attach_audit_trigger_to_new_table();
 
 
 
